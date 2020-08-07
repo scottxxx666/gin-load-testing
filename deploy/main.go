@@ -53,7 +53,7 @@ func main() {
 
 		appLabels := pulumi.StringMap{"app": pulumi.String("load-testing")}
 
-		_, err = appsv1.NewDeployment(ctx, "load-testing-app", &appsv1.DeploymentArgs{
+		deployment, err := appsv1.NewDeployment(ctx, "load-testing-app", &appsv1.DeploymentArgs{
 			Metadata: metav1.ObjectMetaArgs{
 				Namespace: namespace.Metadata.Elem().Name(),
 			},
@@ -71,6 +71,48 @@ func main() {
 							corev1.ContainerArgs{
 								Name:  pulumi.String("load-testing-dep"),
 								Image: pulumi.String("scottxxx666/gin-load-testing:0.0.1"),
+								Resources: corev1.ResourceRequirementsArgs{
+									Requests: pulumi.StringMap{"cpu": pulumi.String("100m")},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, pulumi.Provider(k8sProvider))
+		if err != nil {
+			return err
+		}
+
+		depName := deployment.ID().ApplyString(func(id interface{}) (string, error) {
+			s := strings.Split(fmt.Sprintf("%s", id), "/")
+			return s[len(s)-1], nil
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = autoscalev2.NewHorizontalPodAutoscaler(ctx, "load-testing-hpa", &autoscalev2.HorizontalPodAutoscalerArgs{
+			Metadata: &metav1.ObjectMetaArgs{
+				Namespace: namespace.Metadata.Elem().Name(),
+				Labels:    appLabels,
+			},
+			Spec: autoscalev2.HorizontalPodAutoscalerSpecArgs{
+				MaxReplicas: pulumi.Int(50),
+				ScaleTargetRef: autoscalev2.CrossVersionObjectReferenceArgs{
+					ApiVersion: pulumi.String("apps/v1"),
+					Kind:       pulumi.String("Deployment"),
+					Name:       depName,
+				},
+				MinReplicas: pulumi.Int(1),
+				Metrics: autoscalev2.MetricSpecArray{
+					autoscalev2.MetricSpecArgs{
+						Type: pulumi.String("Resource"),
+						Resource: autoscalev2.ResourceMetricSourceArgs{
+							Name: pulumi.String("cpu"),
+							Target: autoscalev2.MetricTargetArgs{
+								Type:               pulumi.String("Utilization"),
+								AverageUtilization: pulumi.Int(50),
 							},
 						},
 					},
