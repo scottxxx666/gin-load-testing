@@ -16,7 +16,7 @@ func main() {
 	pulumi.Run(func(ctx *pulumi.Context) (err error) {
 		cluster, err := container.NewCluster(ctx, "load-testing", &container.ClusterArgs{
 			InitialNodeCount:      pulumi.Int(1),
-			// RemoveDefaultNodePool: pulumi.Bool(true),
+			RemoveDefaultNodePool: pulumi.Bool(true),
 			Location:              pulumi.String("asia-east1-b"),
 			ClusterAutoscaling: container.ClusterClusterAutoscalingArgs{
 				Enabled:            pulumi.Bool(true),
@@ -30,11 +30,24 @@ func main() {
 					container.ClusterClusterAutoscalingResourceLimitArgs{
 						ResourceType: pulumi.String("memory"),
 						Minimum:      pulumi.Int(1),
-						Maximum: pulumi.Int(40),
+						Maximum:      pulumi.Int(40),
 					},
 				},
 			},
-			NodeConfig: &container.ClusterNodeConfigArgs{
+		})
+		if err != nil {
+			return err
+		}
+
+		pool, err := container.NewNodePool(ctx, "primary-node-pool", &container.NodePoolArgs{
+			Cluster:          cluster.Name,
+			InitialNodeCount: pulumi.Int(1),
+			Location:         pulumi.String("asia-east1-b"),
+			Autoscaling: container.NodePoolAutoscalingArgs{
+				MaxNodeCount: pulumi.Int(4),
+				MinNodeCount: pulumi.Int(1),
+			},
+			NodeConfig: &container.NodePoolNodeConfigArgs{
 				Labels: pulumi.StringMap{
 					"env": pulumi.String("test"),
 				},
@@ -57,7 +70,7 @@ func main() {
 
 		k8sProvider, err := k8s.NewProvider(ctx, "k8sprovider", &k8s.ProviderArgs{
 			Kubeconfig: genKubeconfig(cluster.Endpoint, cluster.Name, cluster.MasterAuth),
-		}, pulumi.DependsOn([]pulumi.Resource{cluster}))
+		}, pulumi.DependsOn([]pulumi.Resource{pool}))
 		if err != nil {
 			return err
 		}
@@ -81,7 +94,7 @@ func main() {
 				Selector: &metav1.LabelSelectorArgs{
 					MatchLabels: appLabels,
 				},
-				Replicas: pulumi.Int(3),
+				Replicas: pulumi.Int(1),
 				Template: &corev1.PodTemplateSpecArgs{
 					Metadata: metav1.ObjectMetaArgs{
 						Labels: appLabels,
