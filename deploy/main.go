@@ -1,19 +1,39 @@
 package main
 
 import (
+	"fmt"
 	"github.com/pulumi/pulumi-gcp/sdk/v3/go/gcp/container"
 	k8s "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes"
 	appsv1 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/apps/v1"
+	autoscalev2 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/autoscaling/v2beta2"
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/core/v1"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"strings"
 )
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) (err error) {
 		cluster, err := container.NewCluster(ctx, "load-testing", &container.ClusterArgs{
-			InitialNodeCount: pulumi.Int(1),
-			Location:         pulumi.String("asia-east1-b"),
+			InitialNodeCount:      pulumi.Int(1),
+			// RemoveDefaultNodePool: pulumi.Bool(true),
+			Location:              pulumi.String("asia-east1-b"),
+			ClusterAutoscaling: container.ClusterClusterAutoscalingArgs{
+				Enabled:            pulumi.Bool(true),
+				AutoscalingProfile: pulumi.String("OPTIMIZE_UTILIZATION"),
+				ResourceLimits: container.ClusterClusterAutoscalingResourceLimitArray{
+					container.ClusterClusterAutoscalingResourceLimitArgs{
+						ResourceType: pulumi.String("cpu"),
+						Minimum:      pulumi.Int(1),
+						Maximum:      pulumi.Int(4),
+					},
+					container.ClusterClusterAutoscalingResourceLimitArgs{
+						ResourceType: pulumi.String("memory"),
+						Minimum:      pulumi.Int(1),
+						Maximum: pulumi.Int(40),
+					},
+				},
+			},
 			NodeConfig: &container.ClusterNodeConfigArgs{
 				Labels: pulumi.StringMap{
 					"env": pulumi.String("test"),
