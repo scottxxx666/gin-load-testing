@@ -1,2 +1,3 @@
 config:
   gcp:project: load-testing-285318
+  pulumi:template: gcp-go
